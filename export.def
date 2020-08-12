@@ -1,0 +1,5 @@
+LIBRARY "liblog"
+
+EXPORTS
+	send2logd
+	uninit_log
