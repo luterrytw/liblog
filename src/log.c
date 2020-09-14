@@ -14,10 +14,10 @@
 static int g_logSocket = INVALID_SOCKET;
 static struct addrinfo *g_serverAddr = NULL;
 static int g_initTime = 0;
-static int g_logLevel = LOG_NORMAL;
-static int g_toStderr = 1;
-static char g_logdIP[16];
-static int g_logdPort = DEF_LOGD_PORT;
+static int g_logLevel = LOG_NORMAL, g_lastLogLevel = LOG_NORMAL;
+static int g_toStderr = 1, g_lastToStderr = 1;
+static char g_logdIP[16], g_lastLogdIP[16];
+static int g_logdPort = DEF_LOGD_PORT, g_lastLogdPort = DEF_LOGD_PORT;
 static pthread_once_t g_logLockOnce = PTHREAD_ONCE_INIT;
 static pthread_mutex_t g_logLock;
 
@@ -167,7 +167,7 @@ static int read_log_config(char* filename)
 	char *ptr;
 	int isValid = 0;
 
-	CLOGD("read_log_config");
+	//CLOGD("%s", "read_log_config");
 	file = fopen(filename, "r");
 	if (!file) {
 		if (errno == ENOENT) {
@@ -190,28 +190,40 @@ static int read_log_config(char* filename)
 		line[sizeof(line)-1] = '\0';
 		if ((ptr = get_config_value(line, "log_level")) != NULL) {
 			g_logLevel = strtol(ptr, NULL, 10);
-			LOGD("config: log_level=%d", g_logLevel);
+			if (g_lastLogLevel != g_logLevel) {
+				LOGD("config: log_level=%d", g_logLevel);
+				g_lastLogLevel = g_logLevel;
+			}
 			continue;
 		}
 		if ((ptr = get_config_value(line, "to_stderr")) != NULL) {
 			g_toStderr = strtol(ptr, NULL, 10);
-			LOGD("config: to_stderr=%d", g_toStderr);
+			if (g_lastToStderr != g_toStderr) {
+				LOGD("config: to_stderr=%d", g_toStderr);
+				g_lastToStderr = g_toStderr;
+			}
 			continue;
 		}
 		if ((ptr = get_config_value(line, "logd_ip")) != NULL) {
 			strncpy(g_logdIP, ptr, sizeof(g_logdIP));
 			g_logdIP[sizeof(g_logdIP)-1] = '\0';
-			LOGD("config: g_logdIP=%s", g_logdIP);
+			if (strcmp(g_lastLogdIP, g_logdIP) != 0) {
+				LOGD("config: g_logdIP=%s", g_logdIP);
+				strcpy(g_lastLogdIP, g_logdIP);
+			}
 			continue;
 		}
 		if ((ptr = get_config_value(line, "logd_port")) != NULL) {
 			g_logdPort = strtol(ptr, NULL, 10);
-			LOGD("config: logd_port=%d", g_logdPort);
+			if (g_lastLogdPort != g_logdPort) {
+				LOGD("config: logd_port=%d", g_logdPort);
+				g_lastLogdPort = g_logdPort;
+			}
 			continue;
 		}
 	}
 	fclose(file);
-	
+
 	if (!isValid) {
 		CLOGD("%s format is invalid", filename);
 	}
@@ -244,6 +256,7 @@ static int init_log()
 	int ret = 0;
 	// set default value
 	strcpy(g_logdIP, "127.0.0.1");
+	strcpy(g_lastLogdIP, "127.0.0.1");
 
 	// load config
 	util_module_path_get(moudlePath);
