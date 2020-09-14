@@ -54,7 +54,16 @@ int util_module_path_get(char * moudlePath)
 	return iRet;
 }
 
+long gettid()
+{
+	return (long) GetCurrentThreadId();
+}
+
 #else // !windows
+
+#include <sys/syscall.h>
+#define gettid() syscall(SYS_gettid)
+
 int util_module_path_get(char * moudlePath)
 {
 	strcpy(moudlePath,".");
@@ -254,6 +263,7 @@ static int init_log()
 	char moudlePath[PATH_MAX];
 	char filename[PATH_MAX];
 	int ret = 0;
+
 	// set default value
 	strcpy(g_logdIP, "127.0.0.1");
 	strcpy(g_lastLogdIP, "127.0.0.1");
@@ -391,10 +401,10 @@ void send2logd(const char *tag, int level, const char *fmt, ...)
 	//length = strlen(message); // message length
 	msgBuf = (char*) buffer + sizeof(int32_t);
 
-	// make format string "03-02 09:22:26.392 [tag] "
+	// make format string "03-02 09:22:26.392 [tag] tid"
 	ptr = msgBuf;
 	va_start(ap, fmt);
-	ptr += sprintf(ptr, "%s.%03d [%.5s] ", datetimeStr, (int) tv.tv_usec/1000, tag);
+	ptr += sprintf(ptr, "%s.%03d [%.5s] %ld ", datetimeStr, (int) tv.tv_usec/1000, tag, gettid());
 	ptr += vsnprintf(ptr, sizeof(buffer)-sizeof(int32_t)-(ptr-msgBuf), fmt, ap);
 	if (ptr > (char*)buffer+sizeof(buffer)-1) { // message is too large
 		ptr = (char*) buffer + (sizeof(buffer) - 12); // "[truncated]" + '\0'
