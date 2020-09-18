@@ -401,10 +401,10 @@ void send2logd(const char *tag, int level, const char *fmt, ...)
 	//length = strlen(message); // message length
 	msgBuf = (char*) buffer + sizeof(int32_t);
 
-	// make format string "03-02 09:22:26.392 [tag] tid"
+	// make format string "03-02 09:22:26.392 tid [tag] "
 	ptr = msgBuf;
 	va_start(ap, fmt);
-	ptr += sprintf(ptr, "%s.%03d [%.5s] %ld ", datetimeStr, (int) tv.tv_usec/1000, tag, gettid());
+	ptr += sprintf(ptr, "%s.%03d %ld [%.5s] ", datetimeStr, (int) tv.tv_usec/1000, gettid(), tag);
 	ptr += vsnprintf(ptr, sizeof(buffer)-sizeof(int32_t)-(ptr-msgBuf), fmt, ap);
 	if (ptr > (char*)buffer+sizeof(buffer)-1) { // message is too large
 		ptr = (char*) buffer + (sizeof(buffer) - 12); // "[truncated]" + '\0'
