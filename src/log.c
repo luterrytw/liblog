@@ -270,7 +270,7 @@ static int init_log()
 
 	// load config
 	util_module_path_get(moudlePath);
-	sprintf(filename, "%s%c%s", moudlePath, FILE_SEPARATOR, "log.ini");
+	snprintf(filename, sizeof(filename), "%.4087s%c%.7s", moudlePath, FILE_SEPARATOR, "log.ini");
 	read_log_config(filename);
 
 	// thread will block here until first init_log_once() is complete
@@ -333,20 +333,23 @@ int uninit_log()
 #ifdef FEATURE_FILE_MONITOR_THREAD
 	FILE *fp;
 	char bakfile[PATH_MAX];
+	int bytes;
 
 	pthread_mutex_lock(&g_logLock); // protect g_fm.running=0 before pthread_join return
 	// stop file monitor thread
 	g_fm.running = 0;
 	// trigger thread to end, we must change file, copy file to .bak and rename .bak to original file
-	snprintf(bakfile, sizeof(bakfile), "%s.bak", g_fm.file);
-	bakfile[PATH_MAX - 1] = '\0';
-	// guarantee the file is exist
-	fp = fopen(g_fm.file, "a+");
-	if (fp) {
-		fclose(fp);
+	bytes = snprintf(bakfile, sizeof(bakfile)-1, "%s.bak", g_fm.file);
+	if (bytes < sizeof(bakfile)) {
+		bakfile[PATH_MAX - 1] = '\0';
+		// guarantee the file is exist
+		fp = fopen(g_fm.file, "a+");
+		if (fp) {
+			fclose(fp);
+		}
+		copyfile(g_fm.file, bakfile);
+		rename(bakfile, g_fm.file);
 	}
-	copyfile(g_fm.file, bakfile);
-	rename(bakfile, g_fm.file);
 
 	ret = pthread_join(g_fileMonitorThread, NULL);
 	if (ret) {
@@ -378,7 +381,7 @@ void send2logd(const char *tag, int level, const char *fmt, ...)
 	char *msgBuf;
 	char *ptr;
 	char datetimeStr[16];
-	int32_t length;
+	int32_t length, magic = LOG_MAGIC_NUMBER;
 	va_list ap;
 	
 	gettimeofday(&tv, NULL);
@@ -398,8 +401,10 @@ void send2logd(const char *tag, int level, const char *fmt, ...)
 	get_datetime_str(tv.tv_sec, datetimeStr);
 
 	// make message
+	// fill magic number, two bytes
+	memcpy(buffer, &magic, sizeof(int32_t));
 	//length = strlen(message); // message length
-	msgBuf = (char*) buffer + sizeof(int32_t);
+	msgBuf = (char*) buffer + sizeof(int32_t) + sizeof(int32_t);
 
 	// make format string "03-02 09:22:26.392 tid [tag] "
 	ptr = msgBuf;
@@ -416,12 +421,12 @@ void send2logd(const char *tag, int level, const char *fmt, ...)
 
 	// make length
 	length = strlen(msgBuf)+1; // message + payload length
-	memcpy(buffer, (unsigned char*) &length, sizeof(int32_t));
+	memcpy(buffer+sizeof(int32_t), (unsigned char*) &length, sizeof(int32_t)); // to skip magic number
 
 	if (g_toStderr) {
 		fprintf(stderr, "%s%s", msgBuf, FILE_NEWLINE);
 	}
 	if (g_logSocket != INVALID_SOCKET) {
-		send_udp_message(g_logSocket, buffer, sizeof(int32_t)+length, g_serverAddr);
+		send_udp_message(g_logSocket, buffer, sizeof(int32_t)+sizeof(int32_t)+length, g_serverAddr);
 	}
 }
