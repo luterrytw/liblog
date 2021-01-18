@@ -36,7 +36,7 @@ static file_monitor_st g_fm;
 #ifdef WIN32
 
 #include <windows.h>
-int util_module_path_get(char * moudlePath)
+static int util_module_path_get(char * moudlePath)
 {
 	int iRet = 0;
 	char * lastSlash = NULL;
@@ -65,7 +65,7 @@ long gettid()
 #include <sys/syscall.h>
 #define gettid() syscall(SYS_gettid)
 
-int util_module_path_get(char * moudlePath)
+static int util_module_path_get(char * moudlePath)
 {
 	strcpy(moudlePath,".");
 	return 0;
@@ -245,6 +245,7 @@ static int read_log_config(char* filename)
 
 	if (!isValid) {
 		CLOGD("%s format is invalid", filename);
+		append_empty_logini(filename);
 	}
 	return 0;
 }
