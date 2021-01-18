@@ -386,13 +386,17 @@ int uninit_log()
 void send2logd(const char *tag, int level, const char *fmt, ...)
 {
 	struct timeval tv;
-	unsigned char buffer[LOGD_MAX_BUF_LEN];
+	unsigned char* buffer;
 	char *msgBuf;
 	char *ptr;
 	char datetimeStr[16];
 	int32_t length, magic = LOG_MAGIC_NUMBER;
 	va_list ap;
 	
+	if (g_logLevel < level) return;
+	buffer = (unsigned char*) malloc(g_maxMsgSize);
+	if (buffer == NULL) return;
+
 	gettimeofday(&tv, NULL);
 
 	// check socket in each log step to recover socket is socket fail
@@ -403,8 +407,9 @@ void send2logd(const char *tag, int level, const char *fmt, ...)
 		init_log();
 	}
 
-	if (g_logLevel < level) return;
-	if (g_logSocket == INVALID_SOCKET && g_toStderr == 0) return;
+	if (g_logSocket == INVALID_SOCKET && g_toStderr == 0) {
+		return;
+	}
 
 	// check length
 	get_datetime_str(tv.tv_sec, datetimeStr);
@@ -418,10 +423,10 @@ void send2logd(const char *tag, int level, const char *fmt, ...)
 	// make format string "03-02 09:22:26.392 tid [tag] "
 	ptr = msgBuf;
 	va_start(ap, fmt);
-	ptr += sprintf(ptr, "%s.%03d %ld [%.5s] ", datetimeStr, (int) tv.tv_usec/1000, gettid(), tag);
-	ptr += vsnprintf(ptr, sizeof(buffer)-sizeof(int32_t)-(ptr-msgBuf), fmt, ap);
-	if (ptr > (char*)buffer+sizeof(buffer)-1) { // message is too large
-		ptr = (char*) buffer + (sizeof(buffer) - 12); // "[truncated]" + '\0'
+	ptr += sprintf(ptr, "%s.%03d %ld [%.12s] ", datetimeStr, (int) tv.tv_usec/1000, gettid(), tag);
+	ptr += vsnprintf(ptr, g_maxMsgSize-sizeof(int32_t)-(ptr-msgBuf), fmt, ap);
+	if (ptr > (char*)buffer+g_maxMsgSize-1) { // message is too large
+		ptr = (char*) buffer + (g_maxMsgSize - 12); // "[truncated]" + '\0'
 		strcpy(ptr, "[truncated]");
 	} else {
 		*ptr = '\0';
