@@ -14,12 +14,13 @@
 static int g_logSocket = INVALID_SOCKET;
 static struct addrinfo *g_serverAddr = NULL;
 static int g_initTime = 0;
-static int g_logLevel = LOG_NORMAL, g_lastLogLevel = LOG_NORMAL;
-static int g_toStderr = 1, g_lastToStderr = 1;
-static char g_logdIP[16], g_lastLogdIP[16];
-static int g_logdPort = DEF_LOGD_PORT, g_lastLogdPort = DEF_LOGD_PORT;
+static int g_logLevel = LOG_NORMAL;
+static int g_toStderr = 1;
+static char g_logdIP[16];
+static int g_logdPort = DEF_LOGD_PORT;
 static pthread_once_t g_logLockOnce = PTHREAD_ONCE_INIT;
 static pthread_mutex_t g_logLock;
+static int g_maxMsgSize = LOGD_MAX_BUF_LEN;
 
 #define FEATURE_FILE_MONITOR_THREAD
 #ifdef FEATURE_FILE_MONITOR_THREAD
@@ -155,17 +156,23 @@ static int append_empty_logini(char* filename)
 {
 	FILE *file = fopen(filename, "a");
 
-	CLOGD("append_empty_logini");
+	CLOGD("%s", "append_empty_logini");
 	if (!file) {
 		return -1;
 	}
 	fputs("\n" LOGC_INI_GROUP "\n", file);
-	fputs("#log_level=4, LOG_FATAL(0), LOG_ALARM(1), LOG_ERROR(2), LOG_WARNING(2), LOG_NORMAL(4), LOG_DEBUG(5)\n", file);
-	fputs("#to_stderr=1, 1: print to stderr, 0: doesn't print stderr\n", file);
-	fputs("#logd_ip=127.0.0.1, ip of logd\n", file);
-	fputs("#logd_port=9278\n", file);
+	fputs("#LOG_FATAL(0), LOG_ALARM(1), LOG_ERROR(2), LOG_WARNING(2), LOG_NORMAL(4), LOG_DEBUG(5)\n", file);
+	fputs("#log_level=4\n\n", file);
+	fputs("#1: print to stderr, 0: doesn't print stderr\n", file);
+	fputs("#to_stderr=1\n\n", file);
+	fputs("#ip of logd\n", file);
+	fputs("#logd_ip=127.0.0.1\n\n", file);
+	fputs("#logd_port=9278\n\n", file);
+	fputs("#max length per message.\n", file);
+	fprintf(file, "#max_msg_size=%d\n\n", LOGD_MAX_BUF_LEN);
+
 	fclose(file);
-	
+
 	return 0;
 }
 
@@ -198,35 +205,38 @@ static int read_log_config(char* filename)
 
 		line[sizeof(line)-1] = '\0';
 		if ((ptr = get_config_value(line, "log_level")) != NULL) {
-			g_logLevel = strtol(ptr, NULL, 10);
-			if (g_lastLogLevel != g_logLevel) {
+			if (g_logLevel != strtol(ptr, NULL, 10)) {
+				g_logLevel = strtol(ptr, NULL, 10);
 				LOGD("config: log_level=%d", g_logLevel);
-				g_lastLogLevel = g_logLevel;
 			}
 			continue;
 		}
-		if ((ptr = get_config_value(line, "to_stderr")) != NULL) {
-			g_toStderr = strtol(ptr, NULL, 10);
-			if (g_lastToStderr != g_toStderr) {
+		if ((ptr = get_config_value(line, "to_stderr")) != NULL) {	
+			if (g_toStderr != strtol(ptr, NULL, 10)) {
+				g_toStderr = strtol(ptr, NULL, 10);
 				LOGD("config: to_stderr=%d", g_toStderr);
-				g_lastToStderr = g_toStderr;
 			}
 			continue;
 		}
 		if ((ptr = get_config_value(line, "logd_ip")) != NULL) {
-			strncpy(g_logdIP, ptr, sizeof(g_logdIP));
-			g_logdIP[sizeof(g_logdIP)-1] = '\0';
-			if (strcmp(g_lastLogdIP, g_logdIP) != 0) {
+			if (strcmp(g_logdIP, ptr) != 0) {
+				strncpy(g_logdIP, ptr, sizeof(g_logdIP));
+				g_logdIP[sizeof(g_logdIP)-1] = '\0';
 				LOGD("config: g_logdIP=%s", g_logdIP);
-				strcpy(g_lastLogdIP, g_logdIP);
 			}
 			continue;
 		}
 		if ((ptr = get_config_value(line, "logd_port")) != NULL) {
-			g_logdPort = strtol(ptr, NULL, 10);
-			if (g_lastLogdPort != g_logdPort) {
+			if (g_logdPort != strtol(ptr, NULL, 10)) {
+				g_logdPort = strtol(ptr, NULL, 10);
 				LOGD("config: logd_port=%d", g_logdPort);
-				g_lastLogdPort = g_logdPort;
+			}
+			continue;
+		}
+		if ((ptr = get_config_value(line, "max_msg_size")) != NULL) {
+			if (g_maxMsgSize != strtol(ptr, NULL, 10)) {
+				g_maxMsgSize = strtol(ptr, NULL, 10);
+				LOGD("config: max_msg_size=%d", g_maxMsgSize);
 			}
 			continue;
 		}
@@ -266,7 +276,6 @@ static int init_log()
 
 	// set default value
 	strcpy(g_logdIP, "127.0.0.1");
-	strcpy(g_lastLogdIP, "127.0.0.1");
 
 	// load config
 	util_module_path_get(moudlePath);
