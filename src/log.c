@@ -424,7 +424,7 @@ void send2logd(const char *tag, int level, const char *fmt, ...)
 	ptr = msgBuf;
 	va_start(ap, fmt);
 	ptr += sprintf(ptr, "%s.%03d %ld [%.12s] ", datetimeStr, (int) tv.tv_usec/1000, gettid(), tag);
-	ptr += vsnprintf(ptr, g_maxMsgSize-sizeof(int32_t)-(ptr-msgBuf), fmt, ap);
+	ptr += vsnprintf(ptr, g_maxMsgSize-sizeof(int32_t)-sizeof(int32_t)-(ptr-msgBuf), fmt, ap);
 	if (ptr > (char*)buffer+g_maxMsgSize-1) { // message is too large
 		ptr = (char*) buffer + (g_maxMsgSize - 12); // "[truncated]" + '\0'
 		strcpy(ptr, "[truncated]");
@@ -443,4 +443,6 @@ void send2logd(const char *tag, int level, const char *fmt, ...)
 	if (g_logSocket != INVALID_SOCKET) {
 		send_udp_message(g_logSocket, buffer, sizeof(int32_t)+sizeof(int32_t)+length, g_serverAddr);
 	}
+
+	free(buffer);
 }
